@@ -29,7 +29,7 @@ take_object(object_name)
 
 take_action(with_object,"action_name",to_object=None)
 比如用刀切菜，把油倒入锅中。
-也可以没有施加物体，比如把炉灶的开关开到5级大火
+也可以没有施加物体，比如把炉灶的开关开到x级大火
 
 wait_time(time)
 选择下次唤醒你的间隔时间，单位是秒

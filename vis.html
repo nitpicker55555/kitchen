@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Kitchen Scene Visualization</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            pointer-events: none;
+            background-color: rgba(0,0,0,0.5);
+            padding: 5px;
+        }
+        #objectInfo {
+            position: absolute;
+            top: 50px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">厨房场景三维可视化 | 使用鼠标拖动旋转视角，滚轮缩放，右键平移</div>
+    <div id="objectInfo"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <script>
+        // 场景数据
+        const objects = {
+            "鸡蛋": [-1.0, 1.0, 3.8],
+            "番茄": [-1.0, 1.2, 3.8],
+            "水槽": [2.75, 0.8, 1.0],
+            "水龙头": [2.75, 0.8, 1.0],
+            "切菜板": [0.5, 0.9, 2.0],
+            "鸡蛋容器": [0.8, 0.9, 2.1],
+            "搅拌碗": [1.0, 0.9, 2.2],
+            "番茄放置区": [2.0, 0.9, 2.0],
+            "刀": [2.5, 0.9, 2.1],
+            "平底锅": [0.7, 0.9, 3.2],
+            "炉灶": [0.7, 0.9, 3.3],
+            "油瓶": [2.0, 0.9, 3.3],
+            "调味料": [2.3, 0.9, 3.2],
+            "盘子": [1.5, 0.9, 2.7],
+            "筷子": [1.7, 0.9, 2.7],
+            "炉灶火力级别开关": [0.6, 0.9, 3.3]
+        };
+
+        const regions = {
+            "冰箱": [[-1.5, -0.5], [0.0, 2.0], [3.5, 4.0]],
+            "水槽区": [[2.0, 3.5], [0.8, 0.8], [0.5, 1.5]],
+            "料理台左侧_A区": [[0.0, 1.5], [0.9, 0.9], [1.5, 2.5]],
+            "料理台右侧_B区": [[1.6, 3.0], [0.9, 0.9], [1.5, 2.5]],
+            "灶台左侧_C区": [[0.0, 1.5], [0.9, 0.9], [3.0, 3.5]],
+            "灶台右侧_D区": [[1.6, 3.0], [0.9, 0.9], [3.0, 3.5]],
+            "出锅装盘区": [[1.0, 2.0], [0.9, 0.9], [2.6, 2.8]]
+        };
+
+        const relationship = {
+            "冰箱": ["鸡蛋", "番茄"],
+            "水槽区": ["水槽", "水龙头"],
+            "料理台左侧_A区": ["切菜板", "鸡蛋容器", "搅拌碗"],
+            "料理台右侧_B区": ["番茄放置区", "刀"],
+            "灶台左侧_C区": ["平底锅", "炉灶", "炉灶火力级别开关"],
+            "灶台右侧_D区": ["油瓶", "调味料"],
+            "出锅装盘区": ["盘子", "筷子"]
+        };
+
+        // 创建颜色映射
+        const regionColors = {
+            "冰箱": 0xadd8e6,
+            "水槽区": 0xc0c0c0,
+            "料理台左侧_A区": 0xf5deb3,
+            "料理台右侧_B区": 0xf5deb3,
+            "灶台左侧_C区": 0xd3d3d3,
+            "灶台右侧_D区": 0xd3d3d3,
+            "出锅装盘区": 0xffffe0
+        };
+
+        // 物品形状和尺寸配置
+        const objectConfigs = {
+            "鸡蛋": { type: "sphere", color: 0xffffff, size: [0.1, 0.1, 0.1] },
+            "番茄": { type: "sphere", color: 0xff6347, size: [0.15, 0.15, 0.15] },
+            "水槽": { type: "box", color: 0xc0c0c0, size: [1.0, 0.2, 0.8] },
+            "水龙头": { type: "cylinder", color: 0x808080, size: [0.05, 0.05, 0.3] },
+            "切菜板": { type: "box", color: 0x8b4513, size: [0.5, 0.05, 0.3] },
+            "鸡蛋容器": { type: "box", color: 0xfafad2, size: [0.2, 0.1, 0.2] },
+            "搅拌碗": { type: "hemisphere", color: 0xffffff, size: [0.2, 0.2, 0.2] },
+            "番茄放置区": { type: "box", color: 0xf0e68c, size: [0.4, 0.01, 0.3] },
+            "刀": { type: "box", color: 0x708090, size: [0.3, 0.02, 0.05] },
+            "平底锅": { type: "cylinder", color: 0x696969, size: [0.2, 0.2, 0.05] },
+            "炉灶": { type: "cylinder", color: 0x000000, size: [0.25, 0.25, 0.02] },
+            "油瓶": { type: "cylinder", color: 0xffff00, size: [0.1, 0.1, 0.25] },
+            "调味料": { type: "box", color: 0xff4500, size: [0.3, 0.1, 0.1] },
+            "盘子": { type: "cylinder", color: 0xffffff, size: [0.2, 0.2, 0.02] },
+            "筷子": { type: "box", color: 0x8b4513, size: [0.2, 0.02, 0.02] },
+            "炉灶火力级别开关": { type: "box", color: 0x000000, size: [0.1, 0.05, 0.1] }
+        };
+
+        // 场景设置
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb); // 天空蓝背景色
+
+        // 透视相机
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(5, 5, 5);
+
+        // 渲染器
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        // 添加轨道控制器
+        const OrbitControls = function(object, domElement) {
+            this.object = object;
+            this.domElement = domElement;
+
+            // API
+            this.enabled = true;
+            this.rotateSpeed = 1.0;
+            this.zoomSpeed = 1.2;
+            this.panSpeed = 0.8;
+
+            // 内部状态
+            this.rotateStart = new THREE.Vector2();
+            this.rotateEnd = new THREE.Vector2();
+            this.rotateDelta = new THREE.Vector2();
+
+            this.panStart = new THREE.Vector2();
+            this.panEnd = new THREE.Vector2();
+            this.panDelta = new THREE.Vector2();
+
+            this.dollyStart = new THREE.Vector2();
+            this.dollyEnd = new THREE.Vector2();
+            this.dollyDelta = new THREE.Vector2();
+
+            // 鼠标事件
+            this.mouseDown = function(event) {
+                if (!this.enabled) return;
+
+                event.preventDefault();
+
+                if (event.button === 0) { // 左键
+                    this.rotateStart.set(event.clientX, event.clientY);
+                    document.addEventListener('mousemove', this.mouseMove, false);
+                    document.addEventListener('mouseup', this.mouseUp, false);
+                } else if (event.button === 2) { // 右键
+                    this.panStart.set(event.clientX, event.clientY);
+                    document.addEventListener('mousemove', this.panMove, false);
+                    document.addEventListener('mouseup', this.panUp, false);
+                }
+            }.bind(this);
+
+            this.mouseMove = function(event) {
+                if (!this.enabled) return;
+
+                event.preventDefault();
+
+                this.rotateEnd.set(event.clientX, event.clientY);
+                this.rotateDelta.subVectors(this.rotateEnd, this.rotateStart);
+
+                // 旋转
+                const element = this.domElement;
+                const quaternion = new THREE.Quaternion().setFromEuler(
+                    new THREE.Euler(
+                        this.rotateDelta.y * 0.002 * this.rotateSpeed,
+                        this.rotateDelta.x * 0.002 * this.rotateSpeed,
+                        0,
+                        'XYZ'
+                    )
+                );
+
+                this.object.position.applyQuaternion(quaternion);
+                this.object.up.applyQuaternion(quaternion);
+
+                this.rotateStart.copy(this.rotateEnd);
+
+                this.object.lookAt(scene.position);
+            }.bind(this);
+
+            this.mouseUp = function(event) {
+                if (!this.enabled) return;
+
+                document.removeEventListener('mousemove', this.mouseMove, false);
+                document.removeEventListener('mouseup', this.mouseUp, false);
+            }.bind(this);
+
+            this.panMove = function(event) {
+                if (!this.enabled) return;
+
+                event.preventDefault();
+
+                this.panEnd.set(event.clientX, event.clientY);
+                this.panDelta.subVectors(this.panEnd, this.panStart);
+
+                // 平移
+                const offset = new THREE.Vector3();
+                const position = this.object.position;
+                offset.copy(position).sub(scene.position);
+
+                // 计算平移方向
+                const targetDistance = offset.length();
+
+                offset.normalize();
+
+                const panLeft = new THREE.Vector3();
+                const up = new THREE.Vector3(0, 1, 0);
+                const right = new THREE.Vector3().crossVectors(up, offset).normalize();
+                const upVector = new THREE.Vector3().crossVectors(offset, right).normalize();
+
+                panLeft.copy(right).multiplyScalar(-this.panDelta.x * 0.002 * targetDistance * this.panSpeed);
+                const panUp = new THREE.Vector3().copy(upVector).multiplyScalar(this.panDelta.y * 0.002 * targetDistance * this.panSpeed);
+
+                this.object.position.add(panLeft);
+                this.object.position.add(panUp);
+                scene.position.add(panLeft);
+                scene.position.add(panUp);
+
+                this.panStart.copy(this.panEnd);
+            }.bind(this);
+
+            this.panUp = function(event) {
+                if (!this.enabled) return;
+
+                document.removeEventListener('mousemove', this.panMove, false);
+                document.removeEventListener('mouseup', this.panUp, false);
+            }.bind(this);
+
+            this.mouseWheel = function(event) {
+                if (!this.enabled) return;
+
+                event.preventDefault();
+
+                const delta = event.deltaY;
+
+                // 缩放
+                const offset = new THREE.Vector3();
+                offset.copy(this.object.position).sub(scene.position);
+
+                const targetDistance = offset.length();
+
+                if (delta > 0) {
+                    this.object.position.addScaledVector(offset, -0.1);
+                } else {
+                    this.object.position.addScaledVector(offset, 0.1);
+                }
+            }.bind(this);
+
+            // 添加事件监听器
+            this.domElement.addEventListener('mousedown', this.mouseDown, false);
+            this.domElement.addEventListener('wheel', this.mouseWheel, false);
+            this.domElement.addEventListener('contextmenu', function(event) { event.preventDefault(); }, false);
+        };
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enabled = true;
+
+        // 光源
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 10, 10);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        // 添加地板
+        const floorGeometry = new THREE.PlaneGeometry(10, 10);
+        const floorMaterial = new THREE.MeshStandardMaterial({
+            color: 0x808080,
+            side: THREE.DoubleSide,
+            roughness: 0.8
+        });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = Math.PI / 2;
+        floor.position.y = 0;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // 可视化区域
+        const regionMeshes = {};
+        for (const [regionName, regionBounds] of Object.entries(regions)) {
+            const width = regionBounds[0][1] - regionBounds[0][0];
+            const height = regionBounds[1][1] - regionBounds[1][0];
+            const depth = regionBounds[2][1] - regionBounds[2][0];
+
+            const x = (regionBounds[0][0] + regionBounds[0][1]) / 2;
+            const y = (regionBounds[1][0] + regionBounds[1][1]) / 2;
+            const z = (regionBounds[2][0] + regionBounds[2][1]) / 2;
+
+            const regionGeometry = new THREE.BoxGeometry(width, height, depth);
+            const regionMaterial = new THREE.MeshStandardMaterial({
+                color: regionColors[regionName],
+                transparent: true,
+                opacity: 0.5
+            });
+
+            const regionMesh = new THREE.Mesh(regionGeometry, regionMaterial);
+            regionMesh.position.set(x, y, z);
+            regionMesh.name = regionName;
+            scene.add(regionMesh);
+
+            regionMeshes[regionName] = regionMesh;
+        }
+
+        // 添加物品
+        const objectMeshes = {};
+        for (const [objectName, objectPosition] of Object.entries(objects)) {
+            const config = objectConfigs[objectName];
+            let objectGeometry;
+
+            switch (config.type) {
+                case "box":
+                    objectGeometry = new THREE.BoxGeometry(
+                        config.size[0], config.size[1], config.size[2]
+                    );
+                    break;
+                case "sphere":
+                    objectGeometry = new THREE.SphereGeometry(
+                        config.size[0], 32, 32
+                    );
+                    break;
+                case "cylinder":
+                    objectGeometry = new THREE.CylinderGeometry(
+                        config.size[0], config.size[0], config.size[2], 32
+                    );
+                    break;
+                case "hemisphere":
+                    objectGeometry = new THREE.SphereGeometry(
+                        config.size[0], 32, 32, 0, Math.PI * 2, 0, Math.PI / 2
+                    );
+                    break;
+                default:
+                    objectGeometry = new THREE.BoxGeometry(
+                        config.size[0], config.size[1], config.size[2]
+                    );
+            }
+
+            const objectMaterial = new THREE.MeshStandardMaterial({
+                color: config.color,
+                roughness: 0.5
+            });
+
+            const objectMesh = new THREE.Mesh(objectGeometry, objectMaterial);
+            objectMesh.position.set(
+                objectPosition[0],
+                objectPosition[1],
+                objectPosition[2]
+            );
+
+            if (config.type === "cylinder") {
+                objectMesh.rotation.x = Math.PI / 2;
+            }
+
+            objectMesh.castShadow = true;
+            objectMesh.receiveShadow = true;
+            objectMesh.name = objectName;
+
+            scene.add(objectMesh);
+            objectMeshes[objectName] = objectMesh;
+        }
+
+        // 添加文本标签
+        const objectInfo = document.getElementById('objectInfo');
+
+        // 射线投射器和鼠标位置
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // 鼠标移动事件
+        renderer.domElement.addEventListener('mousemove', onMouseMove, false);
+
+        function onMouseMove(event) {
+            // 计算归一化的设备坐标 (-1 到 +1)
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // 更新射线投射器
+            raycaster.setFromCamera(mouse, camera);
+
+            // 计算与射线相交的物体
+            const objectsToCheck = Object.values(objectMeshes).concat(Object.values(regionMeshes));
+            const intersects = raycaster.intersectObjects(objectsToCheck);
+
+            if (intersects.length > 0) {
+                const object = intersects[0].object;
+
+                // 显示物体信息
+                objectInfo.style.display = 'block';
+
+                if (Object.values(objectMeshes).includes(object)) {
+                    // 是物品
+                    objectInfo.innerHTML = `物品: ${object.name}<br>坐标: [${objects[object.name].join(', ')}]`;
+
+                    // 查找所属区域
+                    for (const [regionName, objectList] of Object.entries(relationship)) {
+                        if (objectList.includes(object.name)) {
+                            objectInfo.innerHTML += `<br>区域: ${regionName}`;
+                            break;
+                        }
+                    }
+                } else if (Object.values(regionMeshes).includes(object)) {
+                    // 是区域
+                    const regionName = object.name;
+                    const regionBounds = regions[regionName];
+
+                    objectInfo.innerHTML = `区域: ${regionName}<br>` +
+                        `范围: X[${regionBounds[0].join(' - ')}], ` +
+                        `Y[${regionBounds[1].join(' - ')}], ` +
+                        `Z[${regionBounds[2].join(' - ')}]<br>` +
+                        `包含物品: ${relationship[regionName].join(', ')}`;
+                }
+            } else {
+                // 没有相交的物体，隐藏信息框
+                objectInfo.style.display = 'none';
+            }
+        }
+
+        // 窗口大小调整
+        window.addEventListener('resize', onWindowResize, false);
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // 动画循环
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 更新控制器
+            camera.lookAt(scene.position);
+
+            // 渲染场景
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
