@@ -14,7 +14,7 @@ fake_api=os.getenv('hub_api_key')
 def message_template(role,new_info):
     new_dict={'role':role,'content':new_info}
     return new_dict
-def chat_single(messages,mode="",model=None,verbose=False,temperature=0):
+def chat_single(messages,mode="",model='gpt-4o',verbose=False,temperature=0):
     conn = http.client.HTTPSConnection("api.openai-hub.com")
     headers = {
         'Authorization': f'Bearer {fake_api}',
@@ -23,7 +23,7 @@ def chat_single(messages,mode="",model=None,verbose=False,temperature=0):
 
     if mode=='json':
         payload = json.dumps({
-            "model": "gpt-4o",
+            "model": model,
             "messages": messages,
             'temperature':temperature,
             "response_format": {"type": "json_object"}
@@ -31,7 +31,7 @@ def chat_single(messages,mode="",model=None,verbose=False,temperature=0):
 
     elif mode == 'stream':
         payload = json.dumps({
-            "model": "gpt-4o",
+            "model": model,
             "messages": messages,
 
             "stream": True
@@ -64,7 +64,7 @@ def chat_single(messages,mode="",model=None,verbose=False,temperature=0):
         return response_generator()
     else:
         payload = json.dumps({
-            "model": "gpt-4o",
+            "model": model,
             "messages": messages,
             'temperature': temperature,
 
@@ -79,7 +79,7 @@ def chat_single(messages,mode="",model=None,verbose=False,temperature=0):
             res = conn.getresponse()
             data = res.read()
             result = json.loads(data.decode("utf-8"))
-            # print(result)
+            print(result)
             final_result=result["choices"][0]["message"]["content"]
             # print(result)
             if mode=='json_few_shot':

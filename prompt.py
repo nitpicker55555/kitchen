@@ -25,9 +25,12 @@ look_objects()
 没有输入，返回现在离你最近的区域内的物品
 
 take_object(object_name)
-拾取离你最近区域内的物品
+拾取离你最近区域内的物品，身上最多只能拥有两件物品，当你拿着两件物品时再次拾取，身上物品会掉落
 
-take_action(with_object,"action_name",to_object=None)
+drop_object(object_name)
+放下手上的指定物品到现在的位置
+
+take_action("action_name",to_object=None)
 比如用刀切菜，把油倒入锅中。
 也可以没有施加物体，比如把炉灶的开关开到x级大火
 
@@ -35,4 +38,15 @@ wait_time(time)
 选择下次唤醒你的间隔时间，单位是秒
 
 使用python代码运行函数，注意每次会话只能运行一个函数。
+"""
+prompt_action = """
+你需要判断输入的object因为action属性发生的变化
+比如油瓶倒油入锅里，油瓶没有变化，但是锅的变化为 有油了
+比如打开开关到5级，开关的属性变化为5级
+比如切菜后，蔬菜的属性变化就是切好了
+返回json:
+{
+object_name1:property1,
+object_name2:property2
+}
 """

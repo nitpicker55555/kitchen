@@ -1,8 +1,17 @@
 from locations import *
-
-agent_location_now=[0,0]
+from fake_api import *
+from prompt import *
+agent_location_now=[0.0,0.0]
 pre_locations=[]
 global_time=0
+objects_properties={
+    key: {'location': value,  'properties': []
+    }
+    for key, value in objects.items()
+}
+objects_in_hand=[]
+objects_in_hand_history={}
+print(objects_properties)
 def find_nearest_region(current_x, current_y, objects=objects, relationship=relationship, regions=regions):
     """
     Find the nearest region and its contained objects based on current coordinates.
@@ -55,6 +64,8 @@ def find_nearest_region(current_x, current_y, objects=objects, relationship=rela
         'region_name': nearest_region,
         'objects': region_objects
     }
+
+
 def move_to(input_location=None):
     if input_location is None:
         input_location = [0, 0]
@@ -67,17 +78,37 @@ def look_objects():
     global agent_location_now,pre_locations,global_time
 
     return find_nearest_region(agent_location_now[0],agent_location_now[1])
-# Example usage
-def example():
-    # Sample coordinates
-    current_x, current_y = 1.9, 0.9
 
-    result = find_nearest_region(current_x, current_y, objects, relationship, regions)
+def take_action(with_object,action_name,to_object=None):
 
-    print(f"距离最近区域名称: {result['region_name']}")
-    print("\n区域中的物品 (按距离排序):")
-    for obj in result['objects']:
-        print(f"  - {obj['name']}: 坐标{obj['coordinates']}, 距离: {obj['distance']:.2f}")
 
+    query_str="with_object: "+with_object+ "action_name: "+action_name
+    if to_object:
+        query_str+='to_object: '+to_object
+    return_json=general_gpt_without_memory(query_str,json_mode='json',system_prompt=prompt_action)
+    return_json_result=json.loads(return_json)
+    for obj_name in return_json_result:
+
+        objects_properties[obj_name]['properties'].append({"property":return_json_result[obj_name],'timestamp':global_time})
+
+    return "动作完成结果："+str(return_json_result)
+def take_object(object_name):
+    objects_in_hand.append(object_name)
+    if object_name not in objects_in_hand_history:
+        objects_in_hand_history[object_name]=[]
+    objects_in_hand_history[object_name].append({"take_time":global_time})
+    if len(objects_in_hand)>=3: #丢弃多余物品到拾取物品的地点
+        objects_in_hand_history[object_name][0]['drop_time']=global_time
+        objects_properties[objects_in_hand[2]]['location']=objects_properties[object_name]['location']
+    objects_properties[object_name]['location']="in hands"
+
+    return object_name+" 被拿起来了"
+def drop_object(object_name):
+    objects_properties[object_name]['location']=agent_location_now.append(2.0)
+    objects_in_hand.remove(object_name)
+    objects_in_hand_history[object_name][0]['drop_time'] = global_time
+
+    return object_name+" 被放下了，位置："+str(objects_properties[object_name]['location'])
 # Example call (uncomment to run)
-example()
+take_action("刀_2",'切菜','番茄')
+print(objects_properties)
