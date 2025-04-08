@@ -79,7 +79,7 @@ def chat_single(messages,mode="",model='gpt-4o',verbose=False,temperature=0):
             res = conn.getresponse()
             data = res.read()
             result = json.loads(data.decode("utf-8"))
-            print(result)
+            # print(result)
             final_result=result["choices"][0]["message"]["content"]
             # print(result)
             if mode=='json_few_shot':
@@ -109,7 +109,7 @@ def general_gpt_without_memory(query, messages=None,json_mode='',system_prompt='
     messages.append(message_template('user', str(query)))
     # result = chat_single(messages, '','gpt-4o-2024-05-13')
     result = chat_single(messages, json_mode,temperature=temperature,verbose=verbose)
-    print('general_gpt result:', result)
+    # print('general_gpt result:', result)
     return result
 
 def extract_code_blocks(code_str):

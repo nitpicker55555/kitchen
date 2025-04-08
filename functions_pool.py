@@ -1,8 +1,8 @@
 import math
 
-from locations import *
 from fake_api import *
 from prompt import *
+from generate_objects_location import *
 agent_location_now=[0.0,0.0]
 pre_locations=[]
 global_time=0
@@ -11,6 +11,10 @@ objects_properties={
     }
     for key, value in objects.items()
 }
+objects_properties['手']={}
+objects_properties['手']['properties']=[]
+objects_properties['手']['location']="in hands"
+
 objects_in_hand=[]
 objects_in_hand_history={}
 print(objects_properties)
@@ -69,7 +73,10 @@ def move_to(input_location=None):
     global agent_location_now,pre_locations,global_time
     took_time=calculate_movement(agent_location_now,input_location)['time_s']
     agent_location_now=input_location
-    pre_locations.append({"location":input_location,'time':global_time})
+
+
+    pre_region=find_nearest_region(agent_location_now[0],agent_location_now[1])[0]
+    pre_locations.append({"location":input_location,'region':pre_region,'time':global_time})
     global_time+=took_time
     return "Moved to %s. Took %s s."%(str(input_location),took_time)
 def look_objects():
@@ -80,22 +87,39 @@ def look_objects():
 
 def take_action(with_object,action_name,to_object=None):
     global global_time
-    if with_object not in objects_in_hand:
-        return ("Error! %s not in your hand."%with_object)
-    query_str="with_object: "+with_object+ "action_name: "+action_name
-    if to_object:
-        query_str+='to_object: '+to_object
+    # if with_object not in objects_in_hand and with_object!='手':
+    #     return ("Error! %s not in your hand."%with_object)
+
+    objs=find_nearest_region(agent_location_now[0], agent_location_now[1],mode='sys')
+
+    if with_object not in objects_in_hand and  with_object not in objs  and with_object!='手':
+        return ("Error! %s not in this region and not in hands."%with_object)
+    if to_object not in objects_in_hand and  to_object not in objs  and to_object!='手':
+        return ("Error! %s not in this region and not in hands."%to_object)
+
+    query_str="with_object: "+with_object+ "action_name: "+action_name +'to_object: '+to_object
+
+
+    judge_query="with_object: "+with_object+str(objects_properties[with_object]['properties'])+ "action_name: "+action_name +'to_object: '+to_object+str(objects_properties[to_object]['properties'])
+    print(judge_query)
+    judge_json=general_gpt_without_memory(judge_query,json_mode='json',system_prompt=prompt_judge_action)
+    return_judge_json=json.loads(judge_json)
+    print("ACTION JUDGE: ")
+    print(judge_json)
+    if not return_judge_json['actionable']:
+        return "ACTION ERROR! %s"% return_judge_json['reasoning']
     return_json=general_gpt_without_memory(query_str,json_mode='json',system_prompt=prompt_action)
     return_json_result=json.loads(return_json)
     for object_name in return_json_result:
+        if object_name!='took_time':
+            objects_properties[object_name]['properties'].append({"property":return_json_result[object_name],'timestamp':global_time})
+            if return_json_result[object_name]=='disappear': #Action导致物品消失
 
-        objects_properties[object_name]['properties'].append({"property":return_json_result[object_name],'timestamp':global_time})
-        if return_json_result[object_name]=='disappear': #Action导致物品消失
-            objects_in_hand.remove(object_name)
-            objects_in_hand_history[object_name][0]['drop_time'] = global_time
+                objects_in_hand.remove(object_name)
+                objects_in_hand_history[object_name][0]['drop_time'] = global_time
 
-    global_time+=2
-    return "动作完成结果："+str(return_json_result)
+    global_time+=return_json_result['took_time']
+    return "动作完成结果：%s, 花费时间：%s秒"%(str(return_json_result),return_json_result['took_time'])
 def take_object(object_name):
     global global_time
     objs=find_nearest_region(agent_location_now[0], agent_location_now[1],mode='sys')
@@ -114,24 +138,59 @@ def take_object(object_name):
 
     global_time+=2
     return object_name+" 被拿起来了"
-def drop_object(object_name):
-    global global_time
 
-    temp_location=list(agent_location_now)
-    temp_location.insert(1,0.1)
-    objects_properties[object_name]['location']=temp_location
-    objects_in_hand.remove(object_name)
-    objects_in_hand_history[object_name][0]['drop_time'] = global_time
+def drop_object(object_name,container_name=None):
+    global global_time
+    if container_name:
+        objs = find_nearest_region(agent_location_now[0], agent_location_now[1], mode='sys')
+
+        if object_name not in objects_in_hand and object_name not in objs:
+            return ("Error! %s not in this region and not in hands." % object_name)
+        if container_name not in objects_in_hand and container_name not in objs:
+            return ("Error! %s not in this region and not in hands." % container_name)
+
+
+        objects_properties[object_name]['location']=objects_properties[container_name]['location']
+        return_info="%s 被放在了 %s 上面/里面" %(object_name,container_name)
+        objects_properties[object_name]['properties'].append({'in container':container_name,'timestamp':global_time})
+    else:
+
+        temp_location=list(agent_location_now)
+        temp_location.insert(1,0.1)
+        objects_properties[object_name]['location']=temp_location
+        objects_in_hand.remove(object_name)
+        objects_in_hand_history[object_name][0]['drop_time'] = global_time
+        return_info="%s 被放下了，位置：%s" %(object_name,str(objects_properties[object_name]['location']))
 
     global_time+=2
-    return object_name+" 被放下了，位置："+str(objects_properties[object_name]['location'])
+    return return_info
 # Example call (uncomment to run)
 def wait_time(int_time):
     global global_time
     global_time+=int_time
     return str(int_time)+"秒过去了，现在时间为:"+ str(global_time)
+
+
+def get_global():
+    return_json={
+        "global_time":round(global_time,2),
+        "pre_locations":pre_locations,
+        "objects_in_hand_history":objects_in_hand_history,
+        "objects_properties":objects_properties,
+        "region":find_nearest_region(agent_location_now[0],agent_location_now[1])[0]
+
+    }
+
+
+    return return_json
+# move_to((0.55, 4.95))
+# print(take_object('油瓶'))
+#
+# move_to((0.55, 4.05))
+# print(drop_object('平底锅', '炉灶'))
+# print(take_action('手', '打开', '5级炉灶开关'))
 # print(move_to((0.55, 5.85)))
-# # move_to((0.55, 0.1))
+# move_to((0.55, 0.1))
 # print(take_object("番茄"))
 # # move_to((0.0, 1.0))
 # # print(move_to((0.55, 0.45)))

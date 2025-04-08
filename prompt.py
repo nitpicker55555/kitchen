@@ -21,7 +21,7 @@ prompt_main="""
 "水槽区": [[0.0, 1.1], [0.0, 0.2], [2.7, 3.6]],
 "C区": [[0.0, 1.1], [0.0, 0.2], [3.6, 4.5]],
 "D区": [[0.0, 1.1], [0.0, 0.2], [4.5, 5.4]],
-"出锅装盘区": [[0.0, 1.1], [0.0, 0.2], [5.4, 6.3]]
+"E区": [[0.0, 1.1], [0.0, 0.2], [5.4, 6.3]]
 
 
 你有以下函数可以使用：
@@ -34,20 +34,23 @@ look_objects()
 take_object(object_name)
 拾取离你最近区域内的物品，身上最多只能拥有两件物品，当你拿着两件物品时再次拾取，身上物品会掉落
 
-drop_object(object_name)
-放下手上的指定物品到现在的位置
+drop_object(object_name, container_name=None)
+放下手上的指定物品到现在的位置，或者放进某个容器里面/上面，比如把锅放在炉灶上
 
-take_action(with_object,"action_name",to_object=None)
+take_action(with_object,"action_name",to_object)
 比如用刀切菜，把油倒入锅中。
-也可以没有施加物体，比如把炉灶的开关开到x级大火
+with_object也可以为 ‘手’，比如把炉灶的开关开到x级大火
+action_name不能代替to_object
 
 wait_time(int_time)
 选择下次唤醒你的间隔时间，单位是秒
 
-你需要首先查看每个区域的物品，来决定下一步操作
+你需要首先查看每个区域的物品，来决定下一步操作。所有必要的物品你都能在环境中找到
+每个食材都需要被处理后下锅
+
 每次只能进行一步，观察反馈后继续进行
 使用python代码运行函数，注意每次会话只能运行一个函数一次
-如果任务结束，则在回复中写：“做好啦”
+如果任务结束，则在回复中写：“都做好啦”
 """
 prompt_action = """
 你需要判断输入的object因为action属性发生的变化
@@ -55,15 +58,40 @@ prompt_action = """
 比如打开开关到5级，开关的属性变化为5级
 比如切菜后，蔬菜的属性变化就是切好了
 
-下面的action会导致原有物体消失
-把菜倒进锅里：菜消失，锅的property变为里面有菜
-把纸烧掉
+下面的action会给object的property变为disappear
+把菜倒进锅里：菜的property变为disappear，锅的property变为里面有菜
+注意：只有食材才会有disappear属性，（调料也不会消失）
 
-如果原有物体消失，返回的property就是disappear
-
+然后还要在took_time中返回这个行为花费的时间，单位为s，返回一个整数
 返回json:
 {
 object_name1:property1,
-object_name2:property2
+
+object_name2:property2,
+
+took_time:seconds
 }
+"""
+prompt_judge_action = """
+我会告诉你一组行为，with_object,"action_name",to_object
+并且告诉你这个物品的属性，比如是否被处理过了，是否放在案板上
+你要判断这个行为是否actionable，比如with_object为手，action_name为切菜，to_object为蔬菜
+这时你要返回
+返回json:
+{
+"reasoning":"手不能切菜，要用刀",
+"actionable":False,
+}
+不合理的行为：
+被切的物品没有放在案板上
+没有处理的食材倒入锅里
+
+合理的行为：
+油瓶 倒入 平底锅
+刀 切 肉（in container:菜板）
+锅铲 翻炒 蔬菜
+
+
+锅铲 铲出 平底锅
+锅铲 铲入 菜盘
 """
